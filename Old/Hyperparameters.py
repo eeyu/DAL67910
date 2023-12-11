@@ -30,6 +30,8 @@ class BasicNN(nn.Module):
         x = self.final_layer(x)
         return x
 
+
+
 # This distribution is for both x and y
 class Distribution(ABC):
     def __init__(self):

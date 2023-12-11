@@ -21,26 +21,10 @@ def sample_from_pdf(target_density, dimension, size=500000):
     samples = np.reshape(samples, [samples.shape[0], dimension])
     return samples
 
-def sample_from_cdf(cdf, dimension, size=100):
-    ## TODO need to invert the cdf
-    unif_samples = np.random.rand(size, dimension)
-    transformed_samples = cdf(unif_samples)
-    return transformed_samples
-
-def pdf_from_cdf(cdf, x, domain_min, domain_max):
-    # pdf is the slope of cdf
-    domain_mag = domain_max - domain_min
-
-    dx = domain_mag / 100.0
-    upper = cdf(x + dx)
-    lower = cdf(x)
-    slope = (upper - lower) / dx
-    return slope
-
 class Distribution(ABC):
     @abstractmethod
-    def sample(self, n):
-        # returns n of (x, y) pairs
+    def sample(self, n) -> np.array:
+        # returns n of x
         pass
 
     @abstractmethod
@@ -48,17 +32,54 @@ class Distribution(ABC):
         pass
 
 
-# class InvCDFDistribution(Distribution):
-#     def __init__(self, inv_cdf, domain_min, domain_max):
-#         self.inv_cdf = inv_cdf ## TODO make sure to pass cdf or inverse cdf appropriately
-#         self.dimensions = len(domain_min)
-#         self.pdf = lambda x: pdf_from_cdf(cdf=self.inv_cdf, x=x, domain_min=domain_min, domain_max=domain_max) #TODO this is wrong
-#
-#     def sample(self, n):
-#         return sample_from_cdf(cdf=self.inv_cdf, dimension=self.dimensions, size=n)
-#
-#     def get_probability(self, x: np.array):
-#         return self.pdf(x)
+class LabelDistribution(ABC):
+    @abstractmethod
+    def _conditional_probability_x(self, x):
+        pass
+
+    def sample_labels(self, x) -> np.array:
+        ## samples labels_y for values x
+        probabilities = self._conditional_probability_x(x)
+
+        size = len(x)
+        noise = np.random.rand(size)
+        labels = np.empty(size)
+        labels[noise > probabilities] = 1
+        labels[noise < probabilities] = 0
+        return labels
+
+
+class FastUniformOnRangeDistribution(Distribution):
+    def __init__(self, range_min, range_max):
+        ## region: the full space
+        ## range: the desired distribution
+        self.dimensions = len(range_min)
+        self.range_min = range_min
+        self.range_max = range_max
+
+    def sample(self, n):
+        # returns n of x
+        return np.random.uniform(low=self.range_min, high=self.range_max, size=(n, self.dimensions))
+
+    def get_probability(self, x: np.array):
+        return range_pdf(x, self.range_min, self.range_max)
+
+class FastGaussianDistribution(Distribution):
+    def __init__(self, covar_matrix, mean):
+        ## region: the full space
+        ## range: the desired distribution
+        self.dimensions = len(mean)
+        self.mean = mean
+        self.covar_matrix = covar_matrix
+
+    def sample(self, n):
+        # returns n of x
+        return np.random.multivariate_normal(mean=self.mean, cov=self.covar_matrix, size=n)
+
+    def get_probability(self, x: np.array):
+        return gaussian_pdf(x, mean=self.mean, covar=self.covar_matrix)
+
+
 
 class PDFDistribution(Distribution):
     def __init__(self, pdf, dimensions):
@@ -101,12 +122,6 @@ def range_pdf(x, range_min, range_max):
     return pdf
 
 
-def range_inv_cdf(p, range_min, range_max):
-    ## x from 0 to 1
-    ## range: the full distribution
-    # mins/maxs: the desired region
-    return range_min + (range_max - range_min) * (p)
-
 def gaussian_pdf(x, covar, mean):
     ## x is n x d for n samples, d dimensions
     dimensions = x.shape[1]
@@ -115,6 +130,23 @@ def gaussian_pdf(x, covar, mean):
     cov_det = np.linalg.det(covar)
     return 1.0 / (np.sqrt(cov_det * np.power(2*np.pi, dimensions))) * np.exp(-0.5 * (x - mean) @ cov_inv @ (x-mean).T)
 
+def sigmoid(x):
+    return 1.0 / (1.0 + np.exp(-x))
+
+
+class RandomLabelDistribution(LabelDistribution):
+    def _conditional_probability_x(self, x):
+        size = len(x)
+        return np.ones(size) * 0.5
+
+class LinearLabelDistribution(LabelDistribution):
+    def __init__(self, weights):
+        ## weights need to be same dimensions as x
+        self.weights = weights
+
+    def _conditional_probability_x(self, x):
+        probabilities = np.dot(x, self.weights)
+        return sigmoid(probabilities)
 
 
 if __name__=="__main__":
@@ -142,7 +174,7 @@ if __name__=="__main__":
         plt.show()
 
 
-    def test_2d_range():
+    def test_2d_range_metro():
         input_range = 1.0
         num_samples = 100000
         dimension = 2
@@ -163,22 +195,103 @@ if __name__=="__main__":
                    range=[[-input_range, input_range], [-input_range, input_range]])
         plt.show()
 
-    # def test_2d_range_cdf_from_pdf():
-    #     input_range = 1.0
-    #     num_samples = 100000
-    #     dimension = 2
-    #
-    #     mins = np.array([0.1, -0.7])
-    #     maxs = np.array([0.9, 0.8])
-    #     range_mins = np.ones((dimension)) * -input_range
-    #     range_maxs = np.ones((dimension)) * input_range
-    #
-    #     cdf1 = lambda x: range_inv_cdf(x, range_min=mins, range_max=maxs)
-    #     pdf1 = lambda x: pdf_from_cdf(cdf=cdf1, x=x, domain_min=range_mins, domain_max=range_maxs)
-    #     samples = sample_from_pdf(target_density=pdf1, dimension=dimension, size=num_samples)
-    #
-    #     plt.hist2d(samples[:, 0], samples[:, 1], bins=20,
-    #                range=[[-input_range, input_range], [-input_range, input_range]])
-    #     plt.show()
+    def test_2d_range_fast():
+        input_range = 1.0
+        num_samples = 100000
+        dimension = 2
 
-    test_2d_range()
+        mins = np.array([0.1, -0.7])
+        maxs = np.array([0.9, 0.8])
+        range_mins = np.ones((dimension)) * -input_range
+        range_maxs = np.ones((dimension)) * input_range
+
+        # cdf1 = lambda x: range_cdf(x, range_mins=range_mins, range_maxs=range_maxs, mins=mins, maxs=maxs)
+        # samples = sample_from_cdf(cdf=cdf1, dimension=dimension, size=num_samples)
+
+        distribution = FastUniformOnRangeDistribution(range_min=mins, range_max=maxs)
+        samples = distribution.sample(num_samples)
+        print(samples)
+
+        plt.hist2d(samples[:, 0], samples[:, 1], bins=20,
+                   range=[[-input_range, input_range], [-input_range, input_range]])
+        plt.show()
+
+    def test_label_distribution_random():
+        input_range = 1.0
+        num_samples = 100000
+        dimension = 30
+
+        mins = np.ones(dimension) * -input_range
+        maxs = np.ones(dimension) * input_range
+
+        distribution = FastUniformOnRangeDistribution(range_min=mins, range_max=maxs)
+        x = distribution.sample(num_samples)
+
+        label_distribution = RandomLabelDistribution()
+        y = label_distribution.sample_labels(x)
+
+        print(np.sum(y)/num_samples)
+        print("expected", "0")
+
+    def test_label_distribution_biased():
+        input_range = 1.0
+        num_samples = 1000
+        dimension = 2
+
+        mins = np.ones(dimension) * -input_range
+        maxs = np.ones(dimension) * input_range
+
+        # distribution = FastUniformOnRangeDistribution(range_min=mins, range_max=maxs)
+        distribution = FastGaussianDistribution(mean=np.array([-0.5, 0]), covar_matrix=np.array([[0.1,0],[0,0.1]]))
+        x = distribution.sample(num_samples)
+
+        # label_distribution = RandomLabelDistribution()
+        label_distribution = LinearLabelDistribution(weights=np.array([10, 0]))
+
+        # y = random_label_distribution(samples)
+        y = label_distribution.sample_labels(x)
+        positive = x[y>0]
+        negative = x[y<0]
+
+        plt.scatter(positive[:,0], positive[:,1], c='r', alpha=0.5)
+        plt.scatter(negative[:,0], negative[:,1], c='b', alpha=0.5)
+        plt.show()
+
+    test_label_distribution_biased()
+
+
+
+# def sample_from_cdf(cdf, dimension, size=100):
+#     ## TODO need to invert the cdf
+#     unif_samples = np.random.rand(size, dimension)
+#     transformed_samples = cdf(unif_samples)
+#     return transformed_samples
+
+# def pdf_from_cdf(cdf, x, domain_min, domain_max):
+#     # pdf is the slope of cdf
+#     domain_mag = domain_max - domain_min
+#
+#     dx = domain_mag / 100.0
+#     upper = cdf(x + dx)
+#     lower = cdf(x)
+#     slope = (upper - lower) / dx
+#     return slope
+
+
+# class InvCDFDistribution(Distribution):
+#     def __init__(self, inv_cdf, domain_min, domain_max):
+#         self.inv_cdf = inv_cdf ## TODO make sure to pass cdf or inverse cdf appropriately
+#         self.dimensions = len(domain_min)
+#         self.pdf = lambda x: pdf_from_cdf(cdf=self.inv_cdf, x=x, domain_min=domain_min, domain_max=domain_max) #TODO this is wrong
+#
+#     def sample(self, n):
+#         return sample_from_cdf(cdf=self.inv_cdf, dimension=self.dimensions, size=n)
+#
+#     def get_probability(self, x: np.array):
+#         return self.pdf(x)
+
+# def range_inv_cdf(p, range_min, range_max):
+#     ## x from 0 to 1
+#     ## range: the full distribution
+#     # mins/maxs: the desired region
+#     return range_min + (range_max - range_min) * (p)

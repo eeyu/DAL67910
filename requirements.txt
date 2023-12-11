@@ -4,3 +4,6 @@ torchaudio
 matplotlib
 tqdm
 mcint
+ipdb==0.13.9
+torchsummary
+scikit-learn

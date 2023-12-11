@@ -1,14 +1,11 @@
 import numpy as np
-import scipy.integrate as integrate
-import matplotlib.pyplot as plt
 import sampling
-import mcint
 
-from abc import ABC, abstractmethod
+
 ## https://stackoverflow.com/questions/14071704/integrating-a-multidimensional-integral-in-scipy
 
 def mc_function_expectation(distribution: sampling.Distribution,
-                            function, # x: nxR^d -> nxR
+                            function,  # x: nxR^d -> nxR
                             num_samples: int
                             ):
     samples = distribution.sample(num_samples)
