@@ -1,4 +1,3 @@
-import numpy as np
 from torch.utils.data import Dataset
 from deep_active_learning.data import Data
 from sampling import Distribution, LabelDistribution
@@ -7,9 +6,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import paths
 from dataclasses import dataclass
-from torchsummary import summary
 import torch
-from deep_active_learning.query_strategies.strategy import Strategy
 
 
 class GeneralHandler(Dataset):

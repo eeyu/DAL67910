@@ -1,8 +1,5 @@
-import argparse
 import numpy as np
-import torch
-from deep_active_learning.utils import (get_dataset, get_net, get_strategy)
-from pprint import pprint
+from deep_active_learning import (get_strategy)
 import paths
 import sampling
 import architecture
