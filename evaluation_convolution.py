@@ -41,18 +41,24 @@ class Hyperparameters:
 #            "AdversarialBIM",
 #            "AdversarialDeepFool"], help = "query strategy")
 
+num_epochs_for_architecture = {
+    "small": 20,
+     "medium": 30,
+     "large": 40
+}
 optim_params = {'n_epoch': 20,
                 'train_args': {'batch_size': 256, 'num_workers': 0},
                 'test_args': {'batch_size': 1024, 'num_workers': 0},
                 'optimizer_args': {'lr': 1e-3,
                                    'weight_decay': 1e-4}}
 
-DEFAULT_ARGS = Hyperparameters(seed=100,
+RUN_NAME = "200_200_15k"
+DEFAULT_ARGS = Hyperparameters(seed=200,
                                dataset="FashionMNIST",
-                               n_init_labeled=100,
+                               n_init_labeled=200,
                                n_query=100,
-                               n_round=5,
-                               num_train=1500,
+                               n_round=15,
+                               num_train=15000,
                                num_test=0.5,
                                architecture={
                                    "conv_channels": [10, 20, 20],
@@ -142,6 +148,7 @@ def test(args: Hyperparameters):
     lists.start_list("dataset_size")
 
     dataset.initialize_labels(args.n_init_labeled)
+    optim_params["n_epoch"] = num_epochs_for_architecture[args.architecture]
 
     print("Full Accuracy")
     net_full = architecture.get_cnn_net(classifier_params, optim_params)
@@ -224,7 +231,7 @@ def get_evaluations_multiple(param_defaults,
                 plt.pause(0.5)
 
     # plt.show()
-    multi_plot_handler.save("test_plot")
+    multi_plot_handler.save(RUN_NAME)
 
 
 if __name__ == "__main__":
