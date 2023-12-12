@@ -17,6 +17,11 @@ class KMeansSampling(Strategy):
         centers = cluster_learner.cluster_centers_[cluster_idxs]
         dis = (embeddings - centers)**2
         dis = dis.sum(axis=1)
-        q_idxs = np.array([np.arange(embeddings.shape[0])[cluster_idxs==i][dis[cluster_idxs==i].argmin()] for i in range(n)])
+        queries = []
+        for i in range(n):
+            if i in cluster_idxs:
+                queries.append(np.arange(embeddings.shape[0])[cluster_idxs==i][dis[cluster_idxs==i].argmin()])
+        q_idxs = np.array(queries)
+        # q_idxs = np.array([np.arange(embeddings.shape[0])[cluster_idxs==i][dis[cluster_idxs==i].argmin()] for i in range(n)])
 
         return unlabeled_idxs[q_idxs]

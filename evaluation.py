@@ -4,6 +4,21 @@ import sampling
 import architecture
 import torch.nn as nn
 import matplotlib.pyplot as plt
+from dataclasses import dataclass
+
+@dataclass
+class Hyperparameters:
+    nn_hidden_widths: list
+    seed: int = 1
+    n_init_labeled: int = 10000
+    n_query: int = 1000
+    n_round: int = 10
+    num_train: int = 100000
+    num_test: int = int(100000 / 4)
+    dimension: int = 30
+    num_classes: int = 2
+    strategy_name: str = "LeastConfidence"
+    # TODO do not edit this!!
 
 
 # choices = ["RandomSampling",
@@ -19,7 +34,7 @@ import matplotlib.pyplot as plt
 #            "AdversarialBIM",
 #            "AdversarialDeepFool"], help = "query strategy")
 
-DEFAULT_ARGS = architecture.Hyperparameters(seed=100,
+DEFAULT_ARGS = Hyperparameters(seed=100,
                                            n_init_labeled=100,
                                            n_query=100,
                                            n_round=10,
@@ -72,10 +87,10 @@ def test(args, distribution: sampling.Distribution, label_distribution: sampling
                                                       hidden_widths=args.nn_hidden_widths,
                                                       activation=nn.ReLU)
 
-    net = architecture.get_net(classifier_params, optim_params)
+    net = architecture.get_fcc_net(classifier_params, optim_params)
     strategy = get_strategy(args.strategy_name)(dataset, net)  # load strategy
 
-    net_full = architecture.get_net(classifier_params, optim_params)
+    net_full = architecture.get_fcc_net(classifier_params, optim_params)
     dataset_full = dataset.copy()
     strategy_full = get_strategy(args.strategy_name)(dataset_full, net_full)  # load strategy
     strategy_full.label_entire_dataset()

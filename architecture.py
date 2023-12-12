@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import paths
 from dataclasses import dataclass
 import torch
-
+from torchsummary import summary
 
 class GeneralHandler(Dataset):
     def __init__(self, X, Y):
@@ -37,7 +37,8 @@ class ClassifierParams:
     hidden_widths: list
     activation: nn.Module.__class__
 
-def get_net(net_parameters, optim_params):
+
+def get_fcc_net(net_parameters, optim_params):
     return Net(ClassifierNet, optim_params, paths.device, net_parameters)
 
 class ClassifierNet(nn.Module):
@@ -79,20 +80,89 @@ class ClassifierNet(nn.Module):
     def get_embedding_dim(self):
         return self.last_layer_dim
 
-
 @dataclass
-class Hyperparameters:
-    nn_hidden_widths: list
-    seed: int = 1
-    n_init_labeled: int = 10000
-    n_query: int = 1000
-    n_round: int = 10
-    num_train: int = 100000
-    num_test: int = int(100000 / 4)
-    dimension: int = 30
-    num_classes: int = 2
-    strategy_name: str = "LeastConfidence"
-    # TODO do not edit this!!
+class CNNParams:
+    input_dim: tuple # ex 32x32x3
+    output_dim: int
+
+    fc_dims: list
+    channel_dims: list
+
+    conv_kernel: int
+    pool_kernel: int
+
+def get_cnn_net(net_parameters: CNNParams, optim_params):
+    return Net(CNNNet, optim_params, paths.device, net_parameters)
+
+class CNNNet(nn.Module):
+    def __init__(self, classifier_params: CNNParams):
+        super(CNNNet, self).__init__()
+
+        input_channels = classifier_params.input_dim[0]
+        output_dim = classifier_params.output_dim
+
+        channel_dims = classifier_params.channel_dims
+        conv_layers = []
+        last_channel_dim = input_channels
+        image_width = classifier_params.input_dim[1]
+
+        conv_size = classifier_params.conv_kernel
+        pool_size = classifier_params.pool_kernel
+
+        for i in range(len(channel_dims)): # Loop over layers, adding conv2d, layernorm, and relu.
+            conv_layers.append(
+                nn.Sequential(
+                    nn.Conv2d(last_channel_dim, channel_dims[i], kernel_size=conv_size),
+                    nn.ReLU(),
+                    nn.MaxPool2d(kernel_size=pool_size, stride=1)
+                )
+            )
+            image_width = image_width - (conv_size-1) - (pool_size-1)
+            last_channel_dim = channel_dims[i]
+
+        # Dropout here
+
+        self.cnn_output_dims = image_width * image_width * last_channel_dim
+        fc_dims = classifier_params.fc_dims
+        fc_layers = []
+        last_fc_dims = self.cnn_output_dims
+        for i in range(len(fc_dims)): # Loop over layers, adding conv2d, layernorm, and relu.
+            fc_layers.append(
+                nn.Sequential(
+                    nn.Linear(in_features=last_fc_dims, out_features=fc_dims[i]),
+                    nn.ReLU(),
+                )
+            )
+            last_fc_dims = fc_dims[i]
+
+        # Dropout here
+
+        self.conv_layers = nn.ModuleList(conv_layers)
+        self.fc_layers = nn.ModuleList(fc_layers)
+
+        self.embedding_dims = last_fc_dims
+        self.last_layer = nn.Linear(last_fc_dims, output_dim)
+
+        # print(summary(self.to(paths.device),
+        #               input_size=classifier_params.input_dim
+        #               # input_size=classifier_params.input_dim
+        #               ))
+
+    def forward(self, x):
+        for layer in self.conv_layers:
+            x = layer(x)
+        x = F.dropout2d(x)
+        x = x.view(-1, self.cnn_output_dims)
+        for layer in self.fc_layers:
+            x = layer(x)
+        e1 = x
+        x = F.dropout(e1, training=self.training)
+        y = self.last_layer(x)
+        return y, e1
+
+    def get_embedding_dim(self):
+        return self.embedding_dims
+
 
 
 

@@ -10,22 +10,22 @@ params = {'MNIST':
               {'n_epoch': 10, 
                'train_args':{'batch_size': 64, 'num_workers': 1},
                'test_args':{'batch_size': 1000, 'num_workers': 1},
-               'optimizer_args':{'lr': 0.01, 'momentum': 0.5}},
+               'optimizer_args':{'lr': 0.01, 'weight_decay': 1e-6}},
           'FashionMNIST':
               {'n_epoch': 10, 
                'train_args':{'batch_size': 64, 'num_workers': 1},
                'test_args':{'batch_size': 1000, 'num_workers': 1},
-               'optimizer_args':{'lr': 0.01, 'momentum': 0.5}},
+               'optimizer_args':{'lr': 0.01, 'weight_decay': 1e-6}},
           'SVHN':
               {'n_epoch': 20, 
                'train_args':{'batch_size': 64, 'num_workers': 1},
                'test_args':{'batch_size': 1000, 'num_workers': 1},
-               'optimizer_args':{'lr': 0.01, 'momentum': 0.5}},
+               'optimizer_args':{'lr': 0.01, 'weight_decay': 1e-6}},
           'CIFAR10':
               {'n_epoch': 20, 
                'train_args':{'batch_size': 64, 'num_workers': 1},
                'test_args':{'batch_size': 1000, 'num_workers': 1},
-               'optimizer_args':{'lr': 0.05, 'momentum': 0.3}}
+               'optimizer_args':{'lr': 0.05, 'weight_decay': 1e-6}}
           }
 
 def get_handler(name):
@@ -38,15 +38,15 @@ def get_handler(name):
     elif name == 'CIFAR10':
         return CIFAR10_Handler
 
-def get_dataset(name):
+def get_dataset(name, train_size=40000, test_size=40000):
     if name == 'MNIST':
-        return get_MNIST(get_handler(name))
+        return get_MNIST(get_handler(name), train_size=train_size, test_size=test_size)
     elif name == 'FashionMNIST':
-        return get_FashionMNIST(get_handler(name))
+        return get_FashionMNIST(get_handler(name), train_size=train_size, test_size=test_size)
     elif name == 'SVHN':
-        return get_SVHN(get_handler(name))
+        return get_SVHN(get_handler(name), train_size=train_size, test_size=test_size)
     elif name == 'CIFAR10':
-        return get_CIFAR10(get_handler(name))
+        return get_CIFAR10(get_handler(name), train_size=train_size, test_size=test_size)
     else:
         raise NotImplementedError
         

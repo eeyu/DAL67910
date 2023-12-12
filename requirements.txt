@@ -1,9 +1,7 @@
-torch
-torchvision
-torchaudio
 matplotlib
 tqdm
 mcint
 ipdb==0.13.9
 torchsummary
 scikit-learn
+# pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
