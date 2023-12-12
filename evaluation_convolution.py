@@ -5,6 +5,8 @@ import architecture
 import torch.nn as nn
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
+import os
+from plotting_util import MultiPlotHandler, PlotHandler, DictList
 
 
 @dataclass
@@ -39,7 +41,7 @@ class Hyperparameters:
 #            "AdversarialBIM",
 #            "AdversarialDeepFool"], help = "query strategy")
 
-optim_params = {'n_epoch': 10,
+optim_params = {'n_epoch': 20,
                 'train_args': {'batch_size': 256, 'num_workers': 0},
                 'test_args': {'batch_size': 1024, 'num_workers': 0},
                 'optimizer_args': {'lr': 1e-3,
@@ -49,8 +51,8 @@ DEFAULT_ARGS = Hyperparameters(seed=100,
                                dataset="FashionMNIST",
                                n_init_labeled=100,
                                n_query=100,
-                               n_round=9,
-                               num_train=15000,
+                               n_round=5,
+                               num_train=1500,
                                num_test=0.5,
                                architecture={
                                    "conv_channels": [10, 20, 20],
@@ -97,10 +99,12 @@ param_horiz_name = "architecture"
 param_horiz_options = [
     "small",
     "medium",
-    "large"]
+    "large"
+]
 
 param_vert_name = "dataset"
 param_vert_options = datasets
+
 
 
 def calc_deviation_from_full(preds, preds_full):
@@ -130,9 +134,12 @@ def test(args: Hyperparameters):
 
 
     # start experiment
-    accuracies = []
-    deviations_from_full = []
-    full_accuracy_deviations = []
+    lists = DictList()
+    lists.start_list("test_accuracies")
+    lists.start_list("train_accuracies")
+    lists.start_list("test_deviation")
+    lists.start_list("train_deviation")
+    lists.start_list("dataset_size")
 
     dataset.initialize_labels(args.n_init_labeled)
 
@@ -142,44 +149,49 @@ def test(args: Hyperparameters):
     strategy_full = get_strategy(args.strategy_name)(dataset_full, net_full)  # load strategy
     strategy_full.label_entire_dataset()
     strategy_full.train()
-    preds_full = strategy_full.predict(dataset_full.get_test_data())
-    full_accuracy = dataset_full.cal_test_acc(preds_full)
+    preds_full_test = strategy_full.predict(dataset_full.get_test_data())
+    full_accuracy_test = dataset_full.cal_test_acc(preds_full_test)
+    _, train_data = dataset.get_train_data()
+    preds_full_train = strategy_full.predict(train_data)
+    full_accuracy_train = dataset_full.cal_train_acc(preds_full_train)
     print()
-    print(f"Full testing accuracy: {full_accuracy}")
+    print(f"Full testing accuracy: {full_accuracy_test}")
 
     def do_round(i):
         # round 0 accuracy
         print("Round " + str(i))
+        dataset_size = len(np.extract(dataset.labeled_idxs == True, dataset.labeled_idxs))
+        print("dataset size: ", dataset_size)
         strategy.train()
         preds = strategy.predict(dataset.get_test_data())
         _, train_data = dataset.get_train_data()
         preds_train = strategy.predict(train_data)
-        accuracy = dataset.cal_test_acc(preds)
+        accuracy_test = dataset.cal_test_acc(preds)
         accuracy_train = dataset.cal_train_acc(preds_train)
-        print(f"Round " + str(i) + f") testing accuracy: {accuracy}")
+        print(f"Round " + str(i) + f") testing accuracy: {accuracy_test}")
 
         deviation_from_full = accuracy_train
         print("Training Accuracy: ", deviation_from_full)
         # deviation_from_full = calc_deviation_from_full(preds, preds_full)
         # print("Deviation from full: ", deviation_from_full)
-        full_accuracy_deviations.append(np.abs(full_accuracy - accuracy))
-
-        accuracies.append(accuracy)
-        deviations_from_full.append(deviation_from_full)
+        lists.add_to_list("test_accuracies", accuracy_test)
+        lists.add_to_list("train_accuracies", accuracy_train)
+        lists.add_to_list("test_deviation", np.abs(full_accuracy_test - accuracy_test))
+        lists.add_to_list("train_deviation", np.abs(full_accuracy_train - accuracy_train))
+        lists.add_to_list("dataset_size", dataset_size * 1.0 / args.num_train)
 
     do_round(0)
     for rd in range(1, args.n_round + 1):
         # query
         print("Querying....")
         query_idxs = strategy.query(args.n_query)
-        dataset_size = len(np.extract(dataset.labeled_idxs == True, dataset.labeled_idxs))
-        print("dataset size: ", dataset_size)
+
 
         # update labels
         strategy.update(query_idxs)
         do_round(rd)
 
-    return accuracies, deviations_from_full, full_accuracy_deviations
+    return lists
 
 
 def get_evaluations_multiple(param_defaults,
@@ -187,11 +199,11 @@ def get_evaluations_multiple(param_defaults,
                              param_horiz_name, param_horiz_options,
                              param_vert_name, param_vert_options):
     plt.ion()
-    fig1, axs1 = plt.subplots(ncols=len(param_horiz_options), nrows=len(param_vert_options))
-    fig2, axs2 = plt.subplots(ncols=len(param_horiz_options), nrows=len(param_vert_options))
-    fig3, axs3 = plt.subplots(ncols=len(param_horiz_options), nrows=len(param_vert_options))
-    # fig.suptitle('Vertically stacked subplots')
+    c = len(param_horiz_options)
+    r = len(param_vert_options)
 
+    plot_names = ["test_accuracies", "train_accuracies", "test_deviation", "train_deviation"]
+    multi_plot_handler = MultiPlotHandler(r=r, c=c, list_names=plot_names)
 
     for i_pv, param_vert in enumerate(param_vert_options):
         for i_ph, param_horiz in enumerate(param_horiz_options):
@@ -201,25 +213,18 @@ def get_evaluations_multiple(param_defaults,
                 param_defaults.__dict__[param_vert_name] = param_vert
                 param_defaults.__dict__[param_horiz_name] = param_horiz
 
-                accuracies, deviations_from_full, full_accuracy_deviations = test(param_defaults)
-                title = (str(param_horiz_name) + ": " + str(param_horiz) + ", \n" +
+                lists = test(param_defaults)
+                title = (str(param_horiz_name) + ": " + str(param_horiz) + ", " +
                          str(param_vert_name) + ": " + str(param_vert))
-                axs1[i_pv, i_ph].plot(accuracies, label=str(param_overlay))
-                axs1[i_pv, i_ph].title.set_text(title)
 
-                axs2[i_pv, i_ph].plot(deviations_from_full, label=str(param_overlay))
-                axs2[i_pv, i_ph].title.set_text(title)
-
-                axs3[i_pv, i_ph].plot(full_accuracy_deviations, label=str(param_overlay))
-                axs3[i_pv, i_ph].title.set_text(title)
+                multi_plot_handler.fill_with_list(v=i_pv, h=i_ph, label=str(param_overlay), lists=lists, title=title,
+                                                  x_axis_name="frac labeled data", y_axis_name="")
 
                 plt.draw()
                 plt.pause(0.5)
 
     # plt.show()
-    fig1.savefig("accuracy.png")
-    fig2.savefig("sample complexity.png")
-    fig3.savefig("accuracy deviation.png")
+    multi_plot_handler.save("test_plot")
 
 
 if __name__ == "__main__":
