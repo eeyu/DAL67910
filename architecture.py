@@ -83,6 +83,19 @@ class ClassifierNet(nn.Module):
         return self.last_layer_dim
 
 
+@dataclass
+class Hyperparameters:
+    nn_hidden_widths: list
+    seed: int = 1
+    n_init_labeled: int = 10000
+    n_query: int = 1000
+    n_round: int = 10
+    num_train: int = 100000
+    num_test: int = int(100000 / 4)
+    dimension: int = 30
+    num_classes: int = 2
+    strategy_name: str = "LeastConfidence"
+    # TODO do not edit this!!
 
 
 

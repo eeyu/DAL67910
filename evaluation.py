@@ -10,18 +10,45 @@ import torch.nn as nn
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
 
-@dataclass
-class Hyperparameters:
-    nn_hidden_widths: list
-    seed: int = 1
-    n_init_labeled: int = 10000
-    n_query: int = 1000
-    n_round: int = 10
-    num_train: int = 100000
-    num_test: int = int(100000 / 4)
-    dimension: int = 30
-    num_classes: int = 2
-    strategy_name: str = "LeastConfidence"
+
+# choices = ["RandomSampling",
+#            "LeastConfidence",
+#            "MarginSampling",
+#            "EntropySampling",
+#            "LeastConfidenceDropout",
+#            "MarginSamplingDropout",
+#            "EntropySamplingDropout",
+#            "KMeansSampling",
+#            "KCenterGreedy",
+#            "BALDDropout",
+#            "AdversarialBIM",
+#            "AdversarialDeepFool"], help = "query strategy")
+
+DEFAULT_ARGS = architecture.Hyperparameters(seed=100,
+                                           n_init_labeled=100,
+                                           n_query=100,
+                                           n_round=10,
+                                           num_train = 2000,
+                                           num_test = int(1000/4),
+                                           dimension = 30,
+                                           num_classes = 2,
+                                           nn_hidden_widths=[5,5,5],
+                                           strategy_name="EntropySamplingDropout")
+
+strategies = ["RandomSampling",
+              "LeastConfidence",
+              "MarginSamplingDropout",
+              "KMeansSampling",
+              "KCenterGreedy"]
+
+param_overlay_name = "strategy_name"
+param_overlay_options = strategies
+
+param_horiz_name = "nn_hidden_widths"
+param_horiz_options = [[10], [10, 10], [10, 10, 10]]
+
+param_vert_name = "dimension"
+param_vert_options = [10, 50, 100]
 
 def calc_deviation_from_full(preds, preds_full):
     return 1.0 - 1.0 * (preds_full == preds).sum().item() / len(preds_full)
@@ -71,6 +98,7 @@ def test(args, distribution: sampling.Distribution, label_distribution: sampling
     print("Full Accuracy")
     strategy_full.train()
     preds_full = strategy_full.predict(dataset_full.get_test_data())
+    print()
     print(f"Full testing accuracy: {dataset_full.cal_test_acc(preds_full)}")
 
     # round 0 accuracy
@@ -96,7 +124,7 @@ def test(args, distribution: sampling.Distribution, label_distribution: sampling
         strategy.train()
 
         dataset_size = len(np.extract(dataset.labeled_idxs == True, dataset.labeled_idxs))
-        print("dataset size: ", dataset_size)
+        # print("dataset size: ", dataset_size)
 
         # calculate accuracy
         preds = strategy.predict(dataset.get_test_data())
@@ -111,11 +139,13 @@ def test(args, distribution: sampling.Distribution, label_distribution: sampling
 
     return accuracies, deviations_from_full
 
-def get_evaluations_multiple(param_defaults, distribution: sampling.Distribution, label_distribution: sampling.LabelDistribution,
+def get_evaluations_multiple(param_defaults,
+                             # distribution: sampling.Distribution, label_distribution: sampling.LabelDistribution,
                              param_overlay_name, param_overlay_options,
                              param_horiz_name, param_horiz_options,
                              param_vert_name, param_vert_options):
 
+    plt.ion()
     fig1, axs1 = plt.subplots(ncols=len(param_horiz_options), nrows=len(param_vert_options))
     fig2, axs2 = plt.subplots(ncols=len(param_horiz_options), nrows=len(param_vert_options))
     # fig.suptitle('Vertically stacked subplots')
@@ -124,65 +154,40 @@ def get_evaluations_multiple(param_defaults, distribution: sampling.Distribution
     for i_po, param_overlay in enumerate(param_overlay_options):
         for i_pv, param_vert in enumerate(param_vert_options):
             for i_ph, param_horiz in enumerate(param_horiz_options):
-                print(param_overlay)
-                print(param_vert)
-                print(param_horiz)
+                print("="*100)
                 param_defaults.__dict__[param_overlay_name] = param_overlay
                 param_defaults.__dict__[param_vert_name] = param_vert
                 param_defaults.__dict__[param_horiz_name] = param_horiz
 
+                dimension = param_defaults.dimension
+                input_range = 1.0
+                mins = np.ones(dimension) * -input_range
+                maxs = np.ones(dimension) * input_range
+                distribution = sampling.FastUniformOnRangeDistribution(range_min=mins, range_max=maxs)
+                # distribution = sampling.FastGaussianDistribution(mean=np.array([-0.5, 0]), covar_matrix=np.array([[0.1, 0], [0, 0.1]]))
+
+                # label_distribution = sampling.RandomLabelDistribution()
+                # weights = np.zeros(dimension)
+                weights = (np.random.rand(dimension) - 0.5) * 5.0
+                # weights[0] = 100
+                label_distribution = sampling.LinearLabelDistribution(weights=weights)
+
                 accuracies, deviations_from_full = test(param_defaults, distribution, label_distribution)
-                axs2[i_ph].plot(accuracies)
-                axs1[i_pv].plot(deviations_from_full)
+                axs2[i_pv, i_ph].plot(accuracies, label=str(param_overlay))
+                axs2[i_pv, i_ph].title(str(param_horiz_name) + ": " + str(param_horiz) + ", " +
+                                       str(param_vert_name) + ": " + str(param_vert_options))
+                axs1[i_pv, i_ph].plot(deviations_from_full, label=str(param_overlay))
+                axs1[i_pv, i_ph].title(str(param_horiz_name) + ": " + str(param_horiz) + ", " +
+                                       str(param_vert_name) + ": " + str(param_vert_options))
+
+                plt.draw()
+                plt.pause(0.01)
 
     plt.show()
 
 if __name__=="__main__":
-    args = Hyperparameters(seed=100,
-                           n_init_labeled=100,
-                           n_query=100,
-                           n_round=10,
-                           num_train = 1000,
-                           num_test = int(1000/4),
-                           dimension = 30,
-                           num_classes = 2,
-                           nn_hidden_widths=[5,5,5],
-                           strategy_name="EntropySamplingDropout")
-
-    dimension = args.dimension
-
-    input_range = 1.0
-    mins = np.ones(dimension) * -input_range
-    maxs = np.ones(dimension) * input_range
-    distribution = sampling.FastUniformOnRangeDistribution(range_min=mins, range_max=maxs)
-    # distribution = sampling.FastGaussianDistribution(mean=np.array([-0.5, 0]), covar_matrix=np.array([[0.1, 0], [0, 0.1]]))
-
-    # label_distribution = sampling.RandomLabelDistribution()
-    # weights = np.zeros(dimension)
-    weights = (np.random.rand(dimension) - 0.5) * 5.0
-    # weights[0] = 100
-    label_distribution = sampling.LinearLabelDistribution(weights=weights)
-
-    # choices = ["RandomSampling",
-    #            "LeastConfidence",
-    #            "MarginSampling",
-    #            "EntropySampling",
-    #            "LeastConfidenceDropout",
-    #            "MarginSamplingDropout",
-    #            "EntropySamplingDropout",
-    #            "KMeansSampling",
-    #            "KCenterGreedy",
-    #            "BALDDropout",
-    #            "AdversarialBIM",
-    #            "AdversarialDeepFool"], help = "query strategy")
-
-    strategies = ["RandomSampling",
-                 "LeastConfidence",
-                 "MarginSamplingDropout",
-                 "KMeansSampling",
-                 "KCenterGreedy"]
-    get_evaluations_multiple(param_defaults=args,
-                             distribution=distribution, label_distribution=label_distribution,
-                             param_overlay_name="strategy_name", param_overlay_options=strategies,
-                             param_horiz_name="nn_hidden_widths", param_horiz_options=[[10], [10, 10], [10, 10, 10]],
-                             param_vert_name="dimension", param_vert_options=[10, 50, 100])
+    get_evaluations_multiple(param_defaults=DEFAULT_ARGS,
+                             # distribution=distribution, label_distribution=label_distribution,
+                             param_overlay_name=param_overlay_name, param_overlay_options=param_overlay_options,
+                             param_horiz_name=param_horiz_name, param_horiz_options=param_horiz_options,
+                             param_vert_name=param_vert_name, param_vert_options=param_vert_options)
