@@ -148,7 +148,11 @@ def test(args: Hyperparameters):
     lists.start_list("dataset_size")
 
     dataset.initialize_labels(args.n_init_labeled)
-    optim_params["n_epoch"] = num_epochs_for_architecture[args.architecture]
+
+    epochs = num_epochs_for_architecture[args.architecture]
+    if args.dataset == "SVHN":
+        epochs *= 2
+    optim_params["n_epoch"] = epochs
 
     print("Full Accuracy")
     net_full = architecture.get_cnn_net(classifier_params, optim_params)
