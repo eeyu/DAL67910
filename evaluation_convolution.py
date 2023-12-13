@@ -52,11 +52,11 @@ optim_params = {'n_epoch': 20,
                 'optimizer_args': {'lr': 1e-3,
                                    'weight_decay': 1e-4}}
 
-RUN_NAME = "200_200_15k"
+RUN_NAME = "400_200_15k"
 DEFAULT_ARGS = Hyperparameters(seed=200,
                                dataset="FashionMNIST",
-                               n_init_labeled=200,
-                               n_query=100,
+                               n_init_labeled=400,
+                               n_query=200,
                                n_round=15,
                                num_train=15000,
                                num_test=0.5,
